@@ -26,6 +26,12 @@ from vision.schemas import (
     VideoSegmentItem,
 )
 
+def _imwrite_unicode(path: Path, img: np.ndarray, params: list[int] | None = None) -> None:
+    ext = path.suffix or ".jpg"
+    ok, buf = cv2.imencode(ext, img, params or [])
+    if not ok:
+        raise RuntimeError(f"图片编码失败: {path}")
+    buf.tofile(str(path))
 
 def _generate_synthetic_assets(media_dir: Path) -> tuple[Path, Path]:
     img_dir = media_dir / "images"
@@ -37,13 +43,13 @@ def _generate_synthetic_assets(media_dir: Path) -> tuple[Path, Path]:
     cv2.rectangle(img1, (40, 40), (300, 310), (210, 130, 50), -1)
     cv2.circle(img1, (470, 180), 95, (70, 190, 240), -1)
     cv2.putText(img1, "REF-01 POSTER", (55, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
-    cv2.imwrite(str(img_dir / "ref_poster_01.jpg"), img1)
+    _imwrite_unicode(img_dir / "ref_poster_01.jpg", img1)
 
     img2 = np.full((360, 640, 3), (38, 62, 40), dtype=np.uint8)
     cv2.circle(img2, (320, 125), 55, (195, 215, 245), -1)
     cv2.rectangle(img2, (235, 185), (405, 345), (90, 165, 220), -1)
     cv2.putText(img2, "REF-02 PORTRAIT", (40, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (230, 245, 230), 2)
-    cv2.imwrite(str(img_dir / "ref_portrait_02.jpg"), img2)
+    _imwrite_unicode(img_dir / "ref_portrait_02.jpg", img2)
 
     img3 = np.full((360, 640, 3), (68, 28, 52), dtype=np.uint8)
     for x in range(0, 640, 40):
@@ -51,7 +57,7 @@ def _generate_synthetic_assets(media_dir: Path) -> tuple[Path, Path]:
     for y in range(0, 360, 40):
         cv2.line(img3, (0, y), (640, y), (140, 90, 180), 1)
     cv2.rectangle(img3, (180, 90), (460, 270), (220, 180, 90), 3)
-    cv2.imwrite(str(img_dir / "ref_grid_03.jpg"), img3)
+    _imwrite_unicode(img_dir / "ref_grid_03.jpg", img3)
 
     video_path = vid_dir / "ref_clip_01.mp4"
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -66,13 +72,12 @@ def _generate_synthetic_assets(media_dir: Path) -> tuple[Path, Path]:
 
     # 查询图1：轻度压缩 + 亮度微调
     query_edited = media_dir.parent / "query_poster_edited.jpg"
-    cv2.imwrite(str(query_edited), cv2.convertScaleAbs(img1, alpha=1.06, beta=8), [int(cv2.IMWRITE_JPEG_QUALITY), 75])
-
+    _imwrite_unicode(query_edited, cv2.convertScaleAbs(img1, alpha=1.06, beta=8), [int(cv2.IMWRITE_JPEG_QUALITY), 75])
     # 查询图2：水平镜像翻转 + 裁边（模拟对抗搬运编辑）
     query_flipped = media_dir.parent / "query_poster_flipped_crop.jpg"
     flipped = cv2.flip(img1, 1)
     cropped = flipped[12:348, 20:620]
-    cv2.imwrite(str(query_flipped), cropped)
+    _imwrite_unicode(query_flipped, cropped, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
 
     return query_edited, query_flipped
 
