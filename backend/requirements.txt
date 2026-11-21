@@ -1,0 +1,13 @@
+# 第1周核心依赖（无 GPU 也能直接运行）
+numpy>=1.24.0
+opencv-python>=4.8.0
+Pillow>=10.0.0
+pydantic>=2.5.0
+fastapi>=0.110.0
+
+# 可选：正式向量检索与深度视觉特征提取（本地或 AutoDL 服务器推荐安装）
+# faiss-cpu>=1.7.4
+# torch>=2.1.0
+# torchvision>=0.16.0
+# open-clip-torch>=2.24.0
+# ultralytics>=8.1.0   # 第2周目标检测/人脸检测坐标定位

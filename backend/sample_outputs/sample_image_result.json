@@ -1,0 +1,74 @@
+{
+  "task_id": "zh_img_2026_w1",
+  "status": "completed",
+  "file_name": "太空邮差_宣传海报_待检稿.png",
+  "reference_scope": "知识产权底库 v2.4（12,846 部作品）· 智能自查模式",
+  "image_width": 1280,
+  "image_height": 720,
+  "mode": "smart_check",
+  "axis_scores": {
+    "character_design": 86.0,
+    "pose_composition": 78.0,
+    "color_style": 72.0,
+    "text_logo": 81.0,
+    "aigc_artifact_score": 69.0,
+    "watermark_logo_detected": true
+  },
+  "boxes": [
+    {
+      "id": "01",
+      "dimension": "角色形象",
+      "label": "IP 形象重合",
+      "attention_level": "focus",
+      "score": 0.91,
+      "bbox_norm": [
+        0.14,
+        0.16,
+        0.42,
+        0.78
+      ],
+      "location_desc": "画面左侧主体人物区域",
+      "fact_description": "主体角色头盔轮廓、肩部配色及站位比例与参考库条目存在较高结构重合。",
+      "source_ref": "底库作品《星际投递员_角色设定图》(ID: IP-2048)",
+      "evidence_note": "特征余弦相似度 0.91；系统未检出对应角色授权凭证，建议核对授权范围（演示数据）。",
+      "reviewed": false
+    },
+    {
+      "id": "02",
+      "dimension": "画面文字/Logo",
+      "label": "品牌标志雷同",
+      "attention_level": "focus",
+      "score": 0.84,
+      "bbox_norm": [
+        0.63,
+        0.18,
+        0.87,
+        0.43
+      ],
+      "location_desc": "右上角徽标与文字区",
+      "fact_description": "徽标外框几何结构与底库注册图形标志局部特征接近，文字排版位置对应。",
+      "source_ref": "底库作品《星邮局品牌视觉规范》(ID: TM-0892)",
+      "evidence_note": "局部轮廓匹配度 0.84，请人工核查是否属于授权合作物料（演示数据）。",
+      "reviewed": false
+    },
+    {
+      "id": "03",
+      "dimension": "生成痕迹",
+      "label": "局部频域伪影",
+      "attention_level": "moderate",
+      "score": 0.69,
+      "bbox_norm": [
+        0.43,
+        0.56,
+        0.58,
+        0.74
+      ],
+      "location_desc": "中部手持信封与指节局部",
+      "fact_description": "手指关节边缘存在轻度频域纹理不一致与笔触过渡断层。",
+      "source_ref": "内部生成痕迹基线（非底库版权比对）",
+      "evidence_note": "属于生成式辅助绘制常见局部特征，仅作复核参考，不代表权属结论（演示数据）。",
+      "reviewed": false
+    }
+  ],
+  "summary_note": "当前参考范围内共定位 3 处待复核区域（重点关注 2 处，一般关注 1 处），覆盖角色形象、画面文字/Logo 与生成痕迹维度；结论仅供授权核查与人工复核。"
+}

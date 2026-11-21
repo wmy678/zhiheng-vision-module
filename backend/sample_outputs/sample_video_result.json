@@ -1,0 +1,68 @@
+{
+  "task_id": "zh_vid_2026_w1",
+  "status": "completed",
+  "file_name": "城市夜游短片_成片V1.mp4",
+  "reference_scope": "知识产权底库 v2.4（12,846 部作品）· 智能自查模式",
+  "duration_sec": 60.0,
+  "mode": "smart_check",
+  "axis_scores": {
+    "direct_footage_reuse": 84.0,
+    "character_visual": 73.0,
+    "dialogue_transcript": 46.0,
+    "voiceprint_match": 38.0,
+    "story_plot": 61.0,
+    "ai_face_swap_confidence": 76.0,
+    "av_sync_consistency": 89.0
+  },
+  "segments": [
+    {
+      "id": "01",
+      "track": "visual_reuse",
+      "dimension": "画面直接搬运",
+      "start_sec": 12.0,
+      "end_sec": 24.0,
+      "attention_level": "focus",
+      "score": 0.93,
+      "label": "镜像裁剪搬运片段",
+      "transform_hint": "水平镜像 + 轻度裁边",
+      "fact_description": "12s–24s 连续关键帧在水平镜像视角下与底库参考视频对应片段高度一致。",
+      "source_ref": "底库短片《夜航城市纪实》(00:08 - 00:20)",
+      "keyframe_time_sec": 16.0,
+      "evidence_note": "多视角检索命中水平镜像视角（相似度 0.93），当前未关联该片段授权记录（演示数据）。",
+      "reviewed": false
+    },
+    {
+      "id": "02",
+      "track": "ai_anomaly",
+      "dimension": "人物形象",
+      "start_sec": 31.0,
+      "end_sec": 35.0,
+      "attention_level": "focus",
+      "score": 0.76,
+      "label": "疑似 AI 换脸片段",
+      "transform_hint": "帧级面部融合边界异常",
+      "fact_description": "31s–35s 主播面部边缘存在帧间闪烁与肤色纹理过渡异常。",
+      "source_ref": "底库人物设定《签约出镜人_A04》",
+      "keyframe_time_sec": 33.0,
+      "evidence_note": "帧级异常置信度 0.76，需结合原始拍摄工程文件或肖像授权确认（演示数据）。",
+      "reviewed": false
+    },
+    {
+      "id": "03",
+      "track": "plot_av",
+      "dimension": "故事剧情",
+      "start_sec": 42.0,
+      "end_sec": 55.0,
+      "attention_level": "auxiliary",
+      "score": 0.58,
+      "label": "转场空镜与节奏接近",
+      "transform_hint": null,
+      "fact_description": "42s–55s 连续三个城市夜景空镜的景别顺序与参考片相近。",
+      "source_ref": "底库短片《夜航城市纪实》(00:38 - 00:50)",
+      "keyframe_time_sec": 48.0,
+      "evidence_note": "属于辅助观察线索，公共夜景题材存在天然巧合可能，建议人工复核（演示数据）。",
+      "reviewed": false
+    }
+  ],
+  "summary_note": "全片 60 秒共定位 3 段待复核区间（重点关注 2 段，辅助观察 1 段），分布于画面搬运轨、异常线索轨与剧情关联轨。"
+}

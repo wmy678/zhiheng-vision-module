@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>知衡 v2.4 · 成员B第1周组件交付预览（视觉标注与多轨时间轴）</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f5f7fb;
+      color: #111827;
+      line-height: 1.5;
+    }
+    .topbar {
+      background: #ffffff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
+    .brand-icon {
+      width: 28px; height: 28px; border-radius: 8px; background: #2563eb; color: #fff;
+      display: inline-flex; align-items: center; justify-content: center; font-size: 14px;
+    }
+    .ver-pill { font-size: 11px; color: #2563eb; background: #eff6ff; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+    .nav-pills { display: flex; gap: 6px; }
+    .nav-item {
+      font-size: 13px; color: #4b5563; padding: 6px 12px; border-radius: 8px; cursor: default;
+    }
+    .nav-item.active { background: #eff6ff; color: #2563eb; font-weight: 600; }
+    .page { max-width: 1320px; margin: 20px auto; padding: 0 20px 28px; display: flex; flex-direction: column; gap: 16px; }
+
+    /* 顶部控制区（功能二四区之1） */
+    .control-bar {
+      background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px 18px;
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .ctrl-left { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .ctrl-title { font-size: 15px; font-weight: 700; }
+    .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: #f3f4f6; color: #374151; }
+    .chip-blue { background: #eff6ff; color: #1d4ed8; font-weight: 500; }
+    .ctrl-right { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .seg-switch { display: inline-flex; background: #f3f4f6; padding: 3px; border-radius: 9px; gap: 2px; }
+    .seg-btn {
+      border: none; background: transparent; color: #4b5563; font-size: 12px; font-weight: 600;
+      padding: 6px 12px; border-radius: 7px; cursor: pointer;
+    }
+    .seg-btn.active { background: #ffffff; color: #2563eb; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+
+    /* 主工作区（左 1.35 : 右 1） */
+    .workspace { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; align-items: start; }
+    @media (max-width: 980px) { .workspace { grid-template-columns: 1fr; } }
+
+    .card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; }
+    .toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .toolbar-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .btn {
+      border: 1px solid #d1d5db; background: #ffffff; color: #374151; font-size: 12px;
+      padding: 5px 10px; border-radius: 8px; cursor: pointer;
+    }
+    .btn:hover { background: #f9fafb; }
+    .btn.active { background: #2563eb; color: #ffffff; border-color: #2563eb; }
+
+    /* 图片画布 */
+    .viewport { overflow: auto; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; }
+    .stage { position: relative; width: 100%; aspect-ratio: 16 / 9; transform-origin: top left; transition: transform 0.15s ease; }
+    .stage svg { width: 100%; height: 100%; display: block; }
+    .bbox {
+      position: absolute; border: 2.5px solid #dc2626; border-radius: 6px; cursor: pointer;
+      transition: box-shadow 0.15s ease, background-color 0.15s ease;
+    }
+    .bbox.selected { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35); z-index: 4; }
+    .bbox-badge {
+      position: absolute; top: -24px; left: -2px; color: #fff; font-size: 11px; font-weight: 700;
+      padding: 2px 7px; border-radius: 6px; white-space: nowrap;
+    }
+
+    /* 视频播放器与多轨时间轴 */
+    .video-screen {
+      width: 100%; aspect-ratio: 16 / 9; border-radius: 10px;
+      background: linear-gradient(135deg, #0f172a, #1e293b); color: #f8fafc;
+      display: flex; flex-direction: column; justify-content: space-between; padding: 18px; margin-bottom: 14px;
+    }
+    .video-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #cbd5e1; }
+    .video-center { text-align: center; }
+    .video-time { font-size: 32px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .video-sub { font-size: 13px; color: #94a3b8; margin-top: 6px; }
+    .tracks-box { display: flex; flex-direction: column; gap: 8px; }
+    .track-row { display: grid; grid-template-columns: 114px 1fr; align-items: center; gap: 10px; }
+    .track-name { font-size: 12px; color: #4b5563; font-weight: 500; }
+    .timeline-track {
+      position: relative; height: 28px; background: #e5e7eb; border-radius: 7px; cursor: pointer; overflow: hidden;
+    }
+    .seg-block {
+      position: absolute; top: 3px; height: 22px; border: none; border-radius: 5px; color: #fff;
+      font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0.9;
+    }
+    .seg-block.selected { opacity: 1; box-shadow: inset 0 0 0 2px #111827; }
+    .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #111827; pointer-events: none; }
+    .ticks { display: flex; justify-content: space-between; font-size: 11px; color: #6b7280; margin-top: 6px; padding-left: 124px; }
+
+    /* 右侧研判分析区 */
+    .detail-list { display: flex; flex-direction: column; gap: 10px; }
+    .detail-item {
+      border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .detail-item.selected { border-color: #2563eb; background: #eff6ff44; }
+    .detail-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; color: #fff; }
+    .fact-box { font-size: 12px; color: #1f2937; margin-top: 4px; }
+    .evidence-box { font-size: 12px; color: #4b5563; margin-top: 4px; }
+    .detail-foot {
+      display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding-top: 8px;
+      border-top: 1px dashed #e5e7eb; font-size: 11px; color: #6b7280;
+    }
+    .check-btn {
+      border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 11px;
+      padding: 3px 8px; border-radius: 6px; cursor: pointer;
+    }
+    .check-btn.done { background: #ecfdf5; border-color: #10b981; color: #047857; font-weight: 600; }
+
+    /* 底部全局总结（功能二四区之4） */
+    .summary-bar {
+      background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px 18px;
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 14px;
+    }
+    .summary-stats { display: flex; gap: 18px; flex-wrap: wrap; }
+    .stat-item { display: flex; flex-direction: column; }
+    .stat-val { font-size: 18px; font-weight: 700; color: #111827; }
+    .stat-lbl { font-size: 11px; color: #6b7280; }
+    .summary-note { font-size: 12px; color: #4b5563; max-width: 680px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-icon">知</span>
+      <span>知衡 · AIGC内容版权比对与合规预检系统</span>
+      <span class="ver-pill">v2.4 · 成员B Week 1 组件</span>
+    </div>
+    <nav class="nav-pills">
+      <span class="nav-item">风险预检</span>
+      <span class="nav-item active">标记研判</span>
+      <span class="nav-item">合规报告</span>
+      <span class="nav-item">知识产权底库</span>
+    </nav>
+  </header>
+
+  <main class="page">
+    <!-- 1. 顶部控制区 -->
+    <section class="control-bar">
+      <div class="ctrl-left">
+        <span class="ctrl-title" id="topFileName">太空邮差_宣传海报_待检稿.png</span>
+        <span class="chip chip-blue" id="topScope">知识产权底库 v2.4（12,846 部作品）· 智能自查模式</span>
+        <span class="chip">分析完成 · 演示数据</span>
+      </div>
+      <div class="ctrl-right">
+        <div class="seg-switch">
+          <button class="seg-btn active" id="modeSmart">智能自查</button>
+          <button class="seg-btn" id="modeTarget">定向对比</button>
+        </div>
+        <div class="seg-switch">
+          <button class="seg-btn active" id="tabImage">图片边界框组件</button>
+          <button class="seg-btn" id="tabVideo">视频多轨时间轴</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2+3. 图片视图 -->
+    <section id="viewImage" class="workspace">
+      <div class="card">
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <strong style="font-size:14px;">内容定位标记区</strong>
+            <span class="chip">图片四轴：角色形象 / 动作与站位 / 色彩与画风 / 文字Logo</span>
+          </div>
+          <div class="toolbar-group">
+            <button class="btn active" data-img-filter="all">全部</button>
+            <button class="btn" data-img-filter="focus">重点关注</button>
+            <button class="btn" data-img-filter="moderate">一般关注</button>
+            <button class="btn" id="toggleBoxes">隐藏标注框</button>
+            <button class="btn" id="zoomOut">−</button>
+            <span class="chip" id="zoomVal">100%</span>
+            <button class="btn" id="zoomIn">+</button>
+          </div>
+        </div>
+        <div class="viewport">
+          <div class="stage" id="imgStage">
+            <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+              <rect width="1280" height="720" fill="#0f172a" />
+              <circle cx="350" cy="240" r="95" fill="#cbd5e1" opacity="0.9" />
+              <rect x="235" y="345" width="230" height="210" rx="28" fill="#64748b" opacity="0.75" />
+              <rect x="550" y="405" width="185" height="125" rx="14" fill="#38bdf8" opacity="0.24" stroke="#7dd3fc" stroke-width="2" />
+              <rect x="810" y="130" width="305" height="175" rx="18" fill="#f59e0b" opacity="0.22" stroke="#fbbf24" stroke-width="3" />
+              <text x="858" y="230" fill="#fde68a" font-size="34" font-weight="700">STAR POST</text>
+              <text x="44" y="680" fill="#94a3b8" font-size="20">演示底图（React 组件 ImageBBoxAnnotator 支持传入任意图片 URL）</text>
+            </svg>
+            <div id="bboxLayer"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <strong style="font-size:14px;">研判分析区（先事实，后结论）</strong>
+          <span class="chip">点击双向高亮</span>
+        </div>
+        <div class="detail-list" id="imgDetailList"></div>
+      </div>
+    </section>
+
+    <!-- 2+3. 视频视图 -->
+    <section id="viewVideo" class="workspace hidden">
+      <div class="card">
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <strong style="font-size:14px;">多轨风险时间轴</strong>
+            <span class="chip" id="vidTimePill">00:12 / 01:00</span>
+          </div>
+          <div class="toolbar-group">
+            <button class="btn active" id="playBtn">▶ 模拟播放</button>
+            <button class="btn active" data-vid-filter="all">全部</button>
+            <button class="btn" data-vid-filter="focus">重点关注</button>
+            <button class="btn" data-vid-filter="auxiliary">辅助观察</button>
+          </div>
+        </div>
+
+        <div class="video-screen">
+          <div class="video-row">
+            <span>关键帧演示播放器（仅示意定位交互）</span>
+            <span id="activeSegBadge">命中 01 · 镜像裁剪搬运片段</span>
+          </div>
+          <div class="video-center">
+            <div class="video-time" id="vidClock">00:12.0</div>
+            <div class="video-sub" id="vidNote">12s–24s 连续关键帧在水平镜像视角下与底库参考视频对应片段高度一致。</div>
+          </div>
+          <div class="video-row">
+            <span>抽帧策略：1 fps + 镜头直方图去重 + 镜像/裁剪多视角检索</span>
+            <span>总时长 60.0s</span>
+          </div>
+        </div>
+
+        <div class="tracks-box" id="tracksBox"></div>
+        <div class="ticks">
+          <span>00:00</span><span>00:15</span><span>00:30</span><span>00:45</span><span>01:00</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <strong style="font-size:14px;">视频片段研判列表</strong>
+          <span class="chip">点击跳转时间点</span>
+        </div>
+        <div class="detail-list" id="vidDetailList"></div>
+      </div>
+    </section>
+
+    <!-- 4. 底部全局总结 -->
+    <section class="summary-bar">
+      <div class="summary-stats" id="summaryStats"></div>
+      <div class="summary-note" id="summaryNote"></div>
+    </section>
+  </main>
+
+  <script>
+    const ATT = {
+      focus: { text: "重点关注", color: "#DC2626", bg: "rgba(220,38,38,0.16)" },
+      moderate: { text: "一般关注", color: "#D97706", bg: "rgba(217,119,6,0.15)" },
+      auxiliary: { text: "辅助观察", color: "#2563EB", bg: "rgba(37,99,235,0.12)" }
+    };
+
+    const IMG_BOXES = [
+      {
+        id: "01", dimension: "角色形象", label: "IP 形象重合", attention_level: "focus", score: 0.91,
+        bbox_norm: [0.16, 0.17, 0.40, 0.78], location_desc: "画面左侧主体人物区域",
+        fact_description: "主体角色头盔轮廓、肩部配色及站位比例与参考库条目存在较高结构重合。",
+        source_ref: "底库作品《星际投递员_角色设定图》(ID: IP-2048)",
+        evidence_note: "特征余弦相似度 0.91；系统未检出对应角色授权凭证，建议核对授权范围（演示数据）。",
+        reviewed: false
+      },
+      {
+        id: "02", dimension: "画面文字/Logo", label: "品牌标志雷同", attention_level: "focus", score: 0.84,
+        bbox_norm: [0.63, 0.18, 0.87, 0.43], location_desc: "右上角徽标与文字区",
+        fact_description: "徽标外框几何结构与底库注册图形标志局部特征接近，文字排版位置对应。",
+        source_ref: "底库作品《星邮局品牌视觉规范》(ID: TM-0892)",
+        evidence_note: "局部轮廓匹配度 0.84，请人工核查是否属于授权合作物料（演示数据）。",
+        reviewed: false
+      },
+      {
+        id: "03", dimension: "生成痕迹", label: "局部频域伪影", attention_level: "moderate", score: 0.69,
+        bbox_norm: [0.43, 0.56, 0.58, 0.74], location_desc: "中部手持信封与指节局部",
+        fact_description: "手指关节边缘存在轻度频域纹理不一致与笔触过渡断层。",
+        source_ref: "内部生成痕迹基线（非底库版权比对）",
+        evidence_note: "属于生成式辅助绘制常见局部特征，仅作复核参考，不代表权属结论（演示数据）。",
+        reviewed: false
+      }
+    ];
+
+    const VID_DURATION = 60.0;
+    const TRACKS = [
+      { key: "visual_reuse", label: "画面与搬运轨" },
+      { key: "ai_anomaly", label: "AI 异常线索轨" },
+      { key: "plot_av", label: "剧情/音画关联轨" }
+    ];
+    const VID_SEGMENTS = [
+      {
+        id: "01", track: "visual_reuse", dimension: "画面直接搬运", start_sec: 12.0, end_sec: 24.0,
+        attention_level: "focus", score: 0.93, label: "镜像裁剪搬运片段",
+        fact_description: "12s–24s 连续关键帧在水平镜像视角下与底库参考视频对应片段高度一致。",
+        source_ref: "底库短片《夜航城市纪实》(00:08 - 00:20)",
+        evidence_note: "多视角检索命中水平镜像视角（相似度 0.93），当前未关联该片段授权记录（演示数据）。",
+        reviewed: false
+      },
+      {
+        id: "02", track: "ai_anomaly", dimension: "人物形象", start_sec: 31.0, end_sec: 35.0,
+        attention_level: "focus", score: 0.76, label: "疑似 AI 换脸片段",
+        fact_description: "31s–35s 主播面部边缘存在帧间闪烁与肤色纹理过渡异常。",
+        source_ref: "底库人物设定《签约出镜人_A04》",
+        evidence_note: "帧级异常置信度 0.76，需结合原始拍摄工程文件或肖像授权确认（演示数据）。",
+        reviewed: false
+      },
+      {
+        id: "03", track: "plot_av", dimension: "故事剧情", start_sec: 42.0, end_sec: 55.0,
+        attention_level: "auxiliary", score: 0.58, label: "转场空镜与节奏接近",
+        fact_description: "42s–55s 连续三个城市夜景空镜的景别顺序与参考片相近。",
+        source_ref: "底库短片《夜航城市纪实》(00:38 - 00:50)",
+        evidence_note: "属于辅助观察线索，公共夜景题材存在天然巧合可能，建议人工复核（演示数据）。",
+        reviewed: false
+      }
+    ];
+
+    let activeTab = "image", compareMode = "smart_check";
+    let imgFilter = "all", imgSelected = "01", showBoxes = true, zoom = 1;
+    let vidFilter = "all", vidSelected = "01", currentTime = 12.0, playing = false, timer = null;
+
+    function fmt(sec) {
+      const s = Math.max(0, Math.floor(sec));
+      return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+    }
+
+    function updateHeader() {
+      if (activeTab === "image") {
+        document.getElementById("topFileName").textContent = "太空邮差_宣传海报_待检稿.png";
+        document.getElementById("topScope").textContent = compareMode === "smart_check"
+          ? "知识产权底库 v2.4（12,846 部作品）· 智能自查模式"
+          : "定向对比文件：星际投递员_参考设定图.png（不检索公共底库）";
+      } else {
+        document.getElementById("topFileName").textContent = "城市夜游短片_成片V1.mp4";
+        document.getElementById("topScope").textContent = compareMode === "smart_check"
+          ? "知识产权底库 v2.4（12,846 部作品）· 智能自查模式"
+          : "定向对比文件：夜航城市纪实_原片.mp4（不检索公共底库）";
+      }
+    }
+
+    function renderImage() {
+      const layer = document.getElementById("bboxLayer");
+      const list = document.getElementById("imgDetailList");
+      document.getElementById("imgStage").style.transform = `scale(${zoom})`;
+      document.getElementById("zoomVal").textContent = `${Math.round(zoom * 100)}%`;
+
+      const filtered = IMG_BOXES.filter(b => imgFilter === "all" || b.attention_level === imgFilter);
+      layer.innerHTML = showBoxes ? filtered.map(b => {
+        const [x1, y1, x2, y2] = b.bbox_norm;
+        const r = ATT[b.attention_level];
+        const sel = b.id === imgSelected;
+        return `<div class="bbox ${sel ? "selected" : ""}" data-id="${b.id}" style="left:${x1*100}%;top:${y1*100}%;width:${(x2-x1)*100}%;height:${(y2-y1)*100}%;border-color:${r.color};background:${sel ? r.bg : "transparent"};">
+          <span class="bbox-badge" style="background:${r.color};">${b.id} · ${b.dimension} · ${Math.round(b.score*100)}%</span>
+        </div>`;
+      }).join("") : "";
+
+      list.innerHTML = filtered.map(b => {
+        const r = ATT[b.attention_level];
+        return `<div class="detail-item ${b.id === imgSelected ? "selected" : ""}" data-id="${b.id}">
+          <div class="detail-head">
+            <strong>${b.id} · ${b.label}（${b.dimension}）</strong>
+            <span class="tag" style="background:${r.color};">${r.text} · ${Math.round(b.score*100)}%</span>
+          </div>
+          <div class="fact-box"><strong>检测事实：</strong>${b.fact_description}</div>
+          <div class="evidence-box"><strong>比对依据：</strong>${b.source_ref} — ${b.evidence_note}</div>
+          <div class="detail-foot">
+            <span>位置：${b.location_desc}</span>
+            <button class="check-btn ${b.reviewed ? "done" : ""}" data-review-img="${b.id}">${b.reviewed ? "✓ 已人工核对" : "标记已核对"}</button>
+          </div>
+        </div>`;
+      }).join("");
+
+      layer.querySelectorAll(".bbox").forEach(el => el.onclick = () => { imgSelected = el.dataset.id; renderImage(); });
+      list.querySelectorAll(".detail-item").forEach(el => el.onclick = () => { imgSelected = el.dataset.id; renderImage(); });
+      list.querySelectorAll("[data-review-img]").forEach(btn => btn.onclick = (e) => {
+        e.stopPropagation();
+        const item = IMG_BOXES.find(x => x.id === btn.dataset.reviewImg);
+        if (item) { item.reviewed = !item.reviewed; renderImage(); renderSummary(); }
+      });
+    }
+
+    function renderVideo() {
+      const box = document.getElementById("tracksBox");
+      const list = document.getElementById("vidDetailList");
+      const filtered = VID_SEGMENTS.filter(s => vidFilter === "all" || s.attention_level === vidFilter);
+
+      box.innerHTML = TRACKS.map(t => {
+        const segs = filtered.filter(s => s.track === t.key).map(s => {
+          const r = ATT[s.attention_level];
+          const sel = s.id === vidSelected;
+          return `<button class="seg-block ${sel ? "selected" : ""}" data-seg="${s.id}" style="left:${(s.start_sec/VID_DURATION)*100}%;width:${((s.end_sec-s.start_sec)/VID_DURATION)*100}%;background:${r.color};">${s.id}</button>`;
+        }).join("");
+        return `<div class="track-row">
+          <div class="track-name">${t.label}</div>
+          <div class="timeline-track" data-track="${t.key}">
+            ${segs}
+            <div class="playhead" style="left:${(currentTime/VID_DURATION)*100}%;"></div>
+          </div>
+        </div>`;
+      }).join("");
+
+      box.querySelectorAll("[data-seg]").forEach(btn => btn.onclick = (e) => {
+        e.stopPropagation();
+        const s = VID_SEGMENTS.find(x => x.id === btn.dataset.seg);
+        if (s) { vidSelected = s.id; currentTime = s.start_sec; renderVideo(); }
+      });
+      box.querySelectorAll(".timeline-track").forEach(tr => tr.onclick = (e) => {
+        const rect = tr.getBoundingClientRect();
+        currentTime = +(((e.clientX - rect.left) / rect.width) * VID_DURATION).toFixed(1);
+        renderVideo();
+      });
+
+      document.getElementById("vidTimePill").textContent = `${fmt(currentTime)} / ${fmt(VID_DURATION)}`;
+      document.getElementById("vidClock").textContent = `${fmt(currentTime)}.${Math.floor((currentTime % 1) * 10)}`;
+      const hit = VID_SEGMENTS.find(s => currentTime >= s.start_sec && currentTime <= s.end_sec);
+      document.getElementById("activeSegBadge").textContent = hit ? `命中 ${hit.id} · ${hit.label}` : "当前位置：常规画面";
+      document.getElementById("vidNote").textContent = hit ? hit.fact_description : "当前时间点未命中风险片段，可点击下方时间轴色块跳转。";
+
+      list.innerHTML = filtered.map(s => {
+        const r = ATT[s.attention_level];
+        return `<div class="detail-item ${s.id === vidSelected ? "selected" : ""}" data-id="${s.id}">
+          <div class="detail-head">
+            <strong>${s.id} · ${s.label}（${s.dimension}）</strong>
+            <span class="tag" style="background:${r.color};">${r.text} · ${Math.round(s.score*100)}%</span>
+          </div>
+          <div class="fact-box"><strong>检测事实：</strong>${s.fact_description}</div>
+          <div class="evidence-box"><strong>比对依据：</strong>${s.source_ref} — ${s.evidence_note}</div>
+          <div class="detail-foot">
+            <span>时间段：${fmt(s.start_sec)} – ${fmt(s.end_sec)}</span>
+            <button class="check-btn ${s.reviewed ? "done" : ""}" data-review-vid="${s.id}">${s.reviewed ? "✓ 已人工核对" : "标记已核对"}</button>
+          </div>
+        </div>`;
+      }).join("");
+
+      list.querySelectorAll(".detail-item").forEach(el => el.onclick = () => {
+        const s = VID_SEGMENTS.find(x => x.id === el.dataset.id);
+        if (s) { vidSelected = s.id; currentTime = s.start_sec; renderVideo(); }
+      });
+      list.querySelectorAll("[data-review-vid]").forEach(btn => btn.onclick = (e) => {
+        e.stopPropagation();
+        const item = VID_SEGMENTS.find(x => x.id === btn.dataset.reviewVid);
+        if (item) { item.reviewed = !item.reviewed; renderVideo(); renderSummary(); }
+      });
+    }
+
+    function renderSummary() {
+      const items = activeTab === "image" ? IMG_BOXES : VID_SEGMENTS;
+      const focusCnt = items.filter(x => x.attention_level === "focus").length;
+      const reviewedCnt = items.filter(x => x.reviewed).length;
+      const dims = new Set(items.map(x => x.dimension)).size;
+
+      document.getElementById("summaryStats").innerHTML = `
+        <div class="stat-item"><span class="stat-val">${items.length} 处</span><span class="stat-lbl">标记总数</span></div>
+        <div class="stat-item"><span class="stat-val" style="color:#DC2626;">${focusCnt} 处</span><span class="stat-lbl">重点关注</span></div>
+        <div class="stat-item"><span class="stat-val">${dims} 个</span><span class="stat-lbl">涉及维度</span></div>
+        <div class="stat-item"><span class="stat-val" style="color:#047857;">${reviewedCnt} / ${items.length}</span><span class="stat-lbl">已人工核对</span></div>
+      `;
+      document.getElementById("summaryNote").textContent = activeTab === "image"
+        ? "全局归纳：当前参考范围内共定位 3 处待复核区域（角色形象、画面文字/Logo、生成痕迹），结论仅反映特征匹配与授权核查状态，不直接等同于法律侵权判定。"
+        : "全局归纳：全片 60 秒共定位 3 段待复核区间，分布于画面搬运轨、AI 异常线索轨与剧情关联轨；所有区间按唯一标记编号计数，需由人工结合授权材料复核。";
+    }
+
+    document.getElementById("tabImage").onclick = () => {
+      activeTab = "image";
+      document.getElementById("tabImage").classList.add("active");
+      document.getElementById("tabVideo").classList.remove("active");
+      document.getElementById("viewImage").classList.remove("hidden");
+      document.getElementById("viewVideo").classList.add("hidden");
+      updateHeader(); renderSummary();
+    };
+    document.getElementById("tabVideo").onclick = () => {
+      activeTab = "video";
+      document.getElementById("tabVideo").classList.add("active");
+      document.getElementById("tabImage").classList.remove("active");
+      document.getElementById("viewVideo").classList.remove("hidden");
+      document.getElementById("viewImage").classList.add("hidden");
+      updateHeader(); renderSummary();
+    };
+    document.getElementById("modeSmart").onclick = () => {
+      compareMode = "smart_check";
+      document.getElementById("modeSmart").classList.add("active");
+      document.getElementById("modeTarget").classList.remove("active");
+      updateHeader();
+    };
+    document.getElementById("modeTarget").onclick = () => {
+      compareMode = "targeted_compare";
+      document.getElementById("modeTarget").classList.add("active");
+      document.getElementById("modeSmart").classList.remove("active");
+      updateHeader();
+    };
+
+    document.querySelectorAll("[data-img-filter]").forEach(b => b.onclick = () => {
+      imgFilter = b.dataset.imgFilter;
+      document.querySelectorAll("[data-img-filter]").forEach(x => x.classList.toggle("active", x === b));
+      renderImage();
+    });
+    document.querySelectorAll("[data-vid-filter]").forEach(b => b.onclick = () => {
+      vidFilter = b.dataset.vidFilter;
+      document.querySelectorAll("[data-vid-filter]").forEach(x => x.classList.toggle("active", x === b));
+      renderVideo();
+    });
+    document.getElementById("toggleBoxes").onclick = (e) => {
+      showBoxes = !showBoxes;
+      e.target.textContent = showBoxes ? "隐藏标注框" : "显示标注框";
+      renderImage();
+    };
+    document.getElementById("zoomIn").onclick = () => { zoom = Math.min(1.75, +(zoom + 0.25).toFixed(2)); renderImage(); };
+    document.getElementById("zoomOut").onclick = () => { zoom = Math.max(0.75, +(zoom - 0.25).toFixed(2)); renderImage(); };
+    document.getElementById("playBtn").onclick = (e) => {
+      playing = !playing;
+      e.target.textContent = playing ? "⏸ 暂停模拟" : "▶ 模拟播放";
+      if (playing) {
+        timer = setInterval(() => {
+          currentTime = +(currentTime + 0.2).toFixed(1);
+          if (currentTime >= VID_DURATION) currentTime = 0;
+          renderVideo();
+        }, 200);
+      } else {
+        clearInterval(timer);
+      }
+    };
+
+    updateHeader();
+    renderImage();
+    renderVideo();
+    renderSummary();
+  </script>
+</body>
+</html>
