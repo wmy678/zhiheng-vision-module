@@ -1,15 +1,16 @@
 """
-图像特征提取模块 (Week 1 优化版)
-升级点（对齐架构报告第六章“编辑变换片段检索”研究主线）：
-1. 支持原图 + 水平镜像（hflip）+ 中心裁剪（center_crop）多视角特征提取，
-   使模型在面对常见的镜像翻转、轻度裁剪搬运时仍能稳定召回底库原图。
-2. 保留 CLIP / ResNet / OpenCV 512 维三层自动降级机制，无 GPU 环境也可直接联调。
+图像特征提取模块 (v0.3 - 修复自动降级链并绑定模型签名)
+改进点（对应评审意见 #2）：
+1. auto 模式按顺序依次尝试 clip -> resnet -> fallback_cv，不再跳过 ResNet。
+2. 不再静默吞掉异常：记录每一步降级原因到 fallback_history 并输出 warning 日志。
+3. 暴露 model_name / model_weights / preprocess_version 与 signature()，供索引入库与查询时强制校验一致性。
 """
 from __future__ import annotations
 
 import hashlib
+import logging
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -17,9 +18,10 @@ from PIL import Image
 
 from .schemas import ImageFeatureRecord
 
+logger = logging.getLogger(__name__)
+
 
 def compute_sha256(file_path: str | Path) -> str:
-    """计算文件 SHA-256 哈希，用于文件一致性校验与记录追溯。"""
     h = hashlib.sha256()
     with open(file_path, "rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):
@@ -28,7 +30,6 @@ def compute_sha256(file_path: str | Path) -> str:
 
 
 def compute_dhash(image_bgr: np.ndarray, hash_size: int = 8) -> str:
-    """计算 64 位差值感知哈希（dHash）。"""
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
     resized = cv2.resize(gray, (hash_size + 1, hash_size), interpolation=cv2.INTER_AREA)
     diff = resized[:, 1:] > resized[:, :-1]
@@ -45,26 +46,42 @@ def _l2_normalize(vec: np.ndarray) -> np.ndarray:
 
 
 class ImageFeatureExtractor:
-    """统一图像特征提取器（支持多视角编辑变换鲁棒提取）。"""
+    """统一图像特征提取器（带完整降级日志与模型版本签名）。"""
 
     def __init__(self, backend: str = "auto", device: Optional[str] = None) -> None:
         self.requested_backend = backend
         self.device = device
         self.backend_name = "fallback_cv"
+        self.model_weights = "hsv128+grad256+dct128"
+        self.preprocess_version = "cv2-256x256-v1"
         self.dim = 512
         self._model = None
         self._preprocess = None
+        self.fallback_history: List[str] = []
 
-        if backend in ("auto", "clip"):
+        if backend == "auto":
             if self._try_init_clip():
                 return
-            if backend == "clip":
-                raise RuntimeError("已指定 backend='clip'，但当前环境缺少 torch 或 open_clip_torch。")
-
-        if backend == "resnet":
             if self._try_init_resnet():
                 return
-            raise RuntimeError("已指定 backend='resnet'，但当前环境缺少 torch 或 torchvision。")
+            logger.warning(
+                "视觉特征提取器已自动降级为 fallback_cv，降级链路: %s",
+                " | ".join(self.fallback_history),
+            )
+        elif backend == "clip":
+            if not self._try_init_clip():
+                raise RuntimeError(f"初始化 CLIP 失败: {'; '.join(self.fallback_history)}")
+        elif backend == "resnet":
+            if not self._try_init_resnet():
+                raise RuntimeError(f"初始化 ResNet 失败: {'; '.join(self.fallback_history)}")
+        elif backend == "fallback_cv":
+            pass
+        else:
+            raise ValueError(f"不支持的 backend 参数: {backend}")
+
+    @property
+    def signature(self) -> str:
+        return f"{self.backend_name}:{self.model_weights}:{self.preprocess_version}:dim{self.dim}"
 
     def _try_init_clip(self) -> bool:
         try:
@@ -78,9 +95,14 @@ class ImageFeatureExtractor:
             self._preprocess = preprocess
             self.device = dev
             self.backend_name = "clip-vit-b32"
+            self.model_weights = "openai-vit-b-32"
+            self.preprocess_version = "openclip-224-v1"
             self.dim = 512
             return True
-        except Exception:
+        except Exception as exc:
+            msg = f"clip 不可用 ({type(exc).__name__}: {exc})"
+            self.fallback_history.append(msg)
+            logger.info(msg)
             return False
 
     def _try_init_resnet(self) -> bool:
@@ -102,15 +124,17 @@ class ImageFeatureExtractor:
             ])
             self.device = dev
             self.backend_name = "resnet18"
+            self.model_weights = "torchvision-resnet18-default"
+            self.preprocess_version = "imagenet-224-v1"
             self.dim = 512
             return True
-        except Exception:
+        except Exception as exc:
+            msg = f"resnet 不可用 ({type(exc).__name__}: {exc})"
+            self.fallback_history.append(msg)
+            logger.info(msg)
             return False
 
     def _extract_fallback_cv(self, image_bgr: np.ndarray) -> np.ndarray:
-        """
-        512 维多线索视觉描述子（空间分块 HSV + 梯度方向 + 低频 DCT）。
-        """
         img = cv2.resize(image_bgr, (256, 256), interpolation=cv2.INTER_AREA)
 
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -144,12 +168,10 @@ class ImageFeatureExtractor:
         return _l2_normalize(np.concatenate([color_vec, grad_vec, dct_vec]))
 
     def extract_from_bgr(self, image_bgr: np.ndarray) -> Tuple[np.ndarray, str]:
-        """从 OpenCV BGR 图像矩阵提取 (512维归一化向量, dHash)。"""
         phash = compute_dhash(image_bgr)
 
         if self.backend_name == "clip-vit-b32" and self._model is not None:
             import torch
-
             pil_img = Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
             tensor = self._preprocess(pil_img).unsqueeze(0).to(self.device)
             with torch.no_grad():
@@ -159,7 +181,6 @@ class ImageFeatureExtractor:
 
         if self.backend_name == "resnet18" and self._model is not None:
             import torch
-
             pil_img = Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
             tensor = self._preprocess(pil_img).unsqueeze(0).to(self.device)
             with torch.no_grad():
@@ -169,29 +190,19 @@ class ImageFeatureExtractor:
         return self._extract_fallback_cv(image_bgr), phash
 
     def extract_multi_view_from_bgr(self, image_bgr: np.ndarray) -> Dict[str, np.ndarray]:
-        """
-        提取多视角查询特征（原图 / 水平镜像 / 中心85%裁剪），
-        用于提升对镜像、裁边等常见编辑变换的召回鲁棒性。
-        """
         vec_orig, _ = self.extract_from_bgr(image_bgr)
-        flipped = cv2.flip(image_bgr, 1)
-        vec_hflip, _ = self.extract_from_bgr(flipped)
+        vec_hflip, _ = self.extract_from_bgr(cv2.flip(image_bgr, 1))
 
         h, w = image_bgr.shape[:2]
         dh, dw = int(h * 0.075), int(w * 0.075)
         cropped = image_bgr[dh : h - dh, dw : w - dw] if (h > 40 and w > 40) else image_bgr
         vec_crop, _ = self.extract_from_bgr(cropped)
 
-        return {
-            "original": vec_orig,
-            "hflip": vec_hflip,
-            "center_crop": vec_crop,
-        }
+        return {"original": vec_orig, "hflip": vec_hflip, "center_crop": vec_crop}
 
     def extract_file(
         self, file_path: str | Path, item_id: Optional[str] = None, with_hflip: bool = False
     ) -> ImageFeatureRecord:
-        """读取本地图片文件并返回结构化特征记录。"""
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"图片文件不存在: {path}")
@@ -207,15 +218,16 @@ class ImageFeatureExtractor:
         if with_hflip:
             hflip_vec, _ = self.extract_from_bgr(cv2.flip(image_bgr, 1))
 
-        sha256 = compute_sha256(path)
         return ImageFeatureRecord(
             item_id=item_id or path.stem,
             file_path=str(path),
-            sha256=sha256,
+            sha256=compute_sha256(path),
             width=int(w),
             height=int(h),
             phash=phash,
             model_name=self.backend_name,
+            model_weights=self.model_weights,
+            preprocess_version=self.preprocess_version,
             embedding_dim=int(vec.shape[0]),
             embedding=vec.tolist(),
             hflip_embedding=hflip_vec.tolist() if hflip_vec is not None else None,

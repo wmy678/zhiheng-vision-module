@@ -1,53 +1,66 @@
 """
-成员B（视觉/视频模块）数据结构定义 (v0.2 - 对齐《知衡 v2.4》与功能二研判规范)
-关键对齐点：
-1. 维度口径对齐任务一 PPT 第 2 页：
-   - 图片四轴：角色形象(40%) / 动作与站位(25%) / 色彩与画风(20%) / 画面文字与Logo(15%)
-   - 视频五轴：画面直接搬运(30%) / 人物形象(20%) / 原声台词(20%) / 声纹特征(15%) / 故事剧情(15%)
-2. 研判口径对齐功能二与架构报告：
-   - 用 attention_level（重点关注 / 一般关注 / 辅助观察）替代法律定性词
-   - 区分“检测事实（fact_description）”与“比对依据（evidence_note）”
-   - 支持“智能自查（smart_check）”与“定向对比（targeted_compare）”双模式
+成员B（视觉/视频模块）数据结构定义 (v0.3 - 兼容 Pydantic v1 & v2，补齐严格校验与“未检测”状态区分)
 """
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
+import pydantic
 from pydantic import BaseModel, Field
 
+PYDANTIC_V2 = int(pydantic.__version__.split(".")[0]) >= 2
+if PYDANTIC_V2:
+    from pydantic import field_validator, model_validator
+else:
+    from pydantic import root_validator, validator
 
-AttentionLevel = Literal["focus", "moderate", "auxiliary"]  # 重点关注 / 一般关注 / 辅助观察
+
+class CompatModel(BaseModel):
+    """兼容 Pydantic v1 与 v2 的序列化基类"""
+
+    def to_json(self, indent: Optional[int] = None) -> str:
+        if PYDANTIC_V2:
+            return self.model_dump_json(indent=indent)
+        return self.json(ensure_ascii=False, indent=indent)
+
+    @classmethod
+    def from_json(cls, raw: str) -> Any:
+        if PYDANTIC_V2:
+            return cls.model_validate_json(raw)
+        return cls.parse_raw(raw)
+
+
+AttentionLevel = Literal["focus", "moderate", "auxiliary"]
 CompareMode = Literal["smart_check", "targeted_compare"]
 MediaType = Literal["image", "video"]
-TaskStatus = Literal["completed", "no_match", "partial", "failed"]
+TaskStatus = Literal["loading", "completed", "no_match", "partial", "failed"]
+DimensionState = Literal["detected", "not_implemented", "failed"]
 
 
-class ImageFeatureRecord(BaseModel):
-    """单张图片特征提取结果（含多视角鲁棒特征支持）"""
+class ImageFeatureRecord(CompatModel):
     item_id: str = Field(..., description="素材唯一 ID")
     file_path: str = Field(..., description="原始文件路径")
     sha256: str = Field(..., description="文件 SHA-256 校验值")
-    width: int = Field(..., description="图像宽度（像素）")
-    height: int = Field(..., description="图像高度（像素）")
+    width: int = Field(..., gt=0, description="图像宽度（像素）")
+    height: int = Field(..., gt=0, description="图像高度（像素）")
     phash: str = Field(..., description="64 位感知哈希（十六进制）")
     model_name: str = Field(..., description="特征提取后端名称")
-    embedding_dim: int = Field(..., description="特征向量维度")
+    model_weights: str = Field(..., description="权重/参数版本标识")
+    preprocess_version: str = Field(..., description="预处理管线版本")
+    embedding_dim: int = Field(..., gt=0, description="特征向量维度")
     embedding: List[float] = Field(..., description="原图 L2 归一化特征向量")
-    hflip_embedding: Optional[List[float]] = Field(
-        None, description="水平镜像视角特征向量（用于抗镜像搬运检索）"
-    )
+    hflip_embedding: Optional[List[float]] = Field(None, description="水平镜像特征向量")
 
 
-class VideoFrameItem(BaseModel):
-    """视频单帧抽帧记录"""
-    frame_index: int = Field(..., description="原始视频帧序号")
-    timestamp_sec: float = Field(..., description="时间戳（秒）")
-    frame_path: str = Field(..., description="保存的关键帧图片路径")
-    phash: str = Field(..., description="该帧感知哈希")
-    scene_diff: float = Field(0.0, description="与上一保留帧的直方图差异度 (0~1)")
+class VideoFrameItem(CompatModel):
+    frame_index: int = Field(..., ge=0)
+    timestamp_sec: float = Field(..., ge=0.0)
+    frame_path: str
+    phash: str
+    scene_diff: float = Field(0.0, ge=0.0)
+    reason: Literal["base_sample", "scene_change"] = "base_sample"
 
 
-class VideoExtractionResult(BaseModel):
-    """视频抽帧汇总结果"""
+class VideoExtractionResult(CompatModel):
     video_id: str
     file_path: str
     sha256: str
@@ -56,108 +69,186 @@ class VideoExtractionResult(BaseModel):
     duration_sec: float
     width: int
     height: int
+    coverage_start_sec: float = 0.0
+    coverage_end_sec: float = 0.0
+    coverage_ratio: float = Field(0.0, ge=0.0, le=1.0)
     sampled_frames: List[VideoFrameItem]
 
 
-class ImageAxisScores(BaseModel):
-    """图片四轴相似度指标（供功能一雷达图与维度明细消费）"""
-    character_design: float = Field(..., ge=0.0, le=100.0, description="角色形象 (权重 40%)")
-    pose_composition: float = Field(..., ge=0.0, le=100.0, description="动作与站位 (权重 25%)")
-    color_style: float = Field(..., ge=0.0, le=100.0, description="色彩与画风 (权重 20%)")
-    text_logo: float = Field(..., ge=0.0, le=100.0, description="画面文字 / Logo (权重 15%)")
-    aigc_artifact_score: float = Field(0.0, ge=0.0, le=100.0, description="生成痕迹检测（频域伪影/笔触不一致）")
-    watermark_logo_detected: bool = Field(False, description="是否检出疑似水印/Logo")
-
-
-class VideoAxisScores(BaseModel):
-    """视频五轴相似度指标（供功能一雷达图与维度明细消费）"""
-    direct_footage_reuse: float = Field(..., ge=0.0, le=100.0, description="画面直接搬运 (权重 30%)")
-    character_visual: float = Field(..., ge=0.0, le=100.0, description="人物形象 (权重 20%)")
-    dialogue_transcript: float = Field(0.0, ge=0.0, le=100.0, description="原声台词 (权重 20%，由成员A补充)")
-    voiceprint_match: float = Field(0.0, ge=0.0, le=100.0, description="声纹特征 (权重 15%，由成员A补充)")
-    story_plot: float = Field(0.0, ge=0.0, le=100.0, description="故事剧情 (权重 15%)")
-    ai_face_swap_confidence: float = Field(0.0, ge=0.0, le=100.0, description="AI 换脸置信度（帧级）")
-    av_sync_consistency: float = Field(100.0, ge=0.0, le=100.0, description="音画一致性评分")
-
-
-class BoundingBoxItem(BaseModel):
-    """图片边界框标记条目（供前端 ImageBBoxAnnotator 消费）"""
-    id: str = Field(..., description="固定标记编号，如 '01'、'02'")
-    dimension: str = Field(..., description="所属维度：角色形象 | 动作与站位 | 色彩与画风 | 画面文字/Logo | 生成痕迹")
-    label: str = Field(..., description="分析标签，如 'IP 形象重合' / '品牌标志雷同' / '手部生成异常'")
-    attention_level: AttentionLevel = Field(..., description="关注程度：focus(重点关注) | moderate(一般关注) | auxiliary(辅助观察)")
-    score: float = Field(..., ge=0.0, le=1.0, description="局部特征相似度/置信度 (0~1)")
-    bbox_norm: List[float] = Field(
-        ...,
-        min_length=4,
-        max_length=4,
-        description="归一化边界框 [x1, y1, x2, y2]，范围 0~1",
+class ImageAxisScores(CompatModel):
+    character_design: Optional[float] = Field(None, ge=0.0, le=100.0)
+    pose_composition: Optional[float] = Field(None, ge=0.0, le=100.0)
+    color_style: Optional[float] = Field(None, ge=0.0, le=100.0)
+    text_logo: Optional[float] = Field(None, ge=0.0, le=100.0)
+    aigc_artifact_score: Optional[float] = Field(None, ge=0.0, le=100.0)
+    watermark_logo_detected: Optional[bool] = None
+    dimension_status: Dict[str, DimensionState] = Field(
+        default_factory=lambda: {
+            "character_design": "not_implemented",
+            "pose_composition": "not_implemented",
+            "color_style": "not_implemented",
+            "text_logo": "not_implemented",
+            "aigc_artifact_score": "not_implemented",
+        }
     )
-    location_desc: str = Field(..., description="区域文字位置，如 '画面左侧主体人物头部区域'")
-    fact_description: str = Field(..., description="客观检测事实（先描述事实）")
-    source_ref: Optional[str] = Field(None, description="命中的底库参考素材或定向对比文件")
-    evidence_note: str = Field("", description="比对依据与人工复核提示（不直接作侵权裁决）")
-    reviewed: bool = Field(False, description="人工是否已核对")
 
 
-class ImageDetectionPayload(BaseModel):
-    """图片检测返回 JSON 结构"""
+class VideoAxisScores(CompatModel):
+    direct_footage_reuse: Optional[float] = Field(None, ge=0.0, le=100.0)
+    character_visual: Optional[float] = Field(None, ge=0.0, le=100.0)
+    dialogue_transcript: Optional[float] = Field(None, ge=0.0, le=100.0)
+    voiceprint_match: Optional[float] = Field(None, ge=0.0, le=100.0)
+    story_plot: Optional[float] = Field(None, ge=0.0, le=100.0)
+    ai_face_swap_confidence: Optional[float] = Field(None, ge=0.0, le=100.0)
+    av_sync_consistency: Optional[float] = Field(None, ge=0.0, le=100.0)
+    dimension_status: Dict[str, DimensionState] = Field(
+        default_factory=lambda: {
+            "direct_footage_reuse": "not_implemented",
+            "character_visual": "not_implemented",
+            "dialogue_transcript": "not_implemented",
+            "voiceprint_match": "not_implemented",
+            "story_plot": "not_implemented",
+            "ai_face_swap_confidence": "not_implemented",
+            "av_sync_consistency": "not_implemented",
+        }
+    )
+
+
+def _check_bbox_norm(v: List[float]) -> List[float]:
+    if len(v) != 4:
+        raise ValueError(f"bbox_norm 必须包含 4 个坐标值，当前: {v}")
+    x1, y1, x2, y2 = v
+    if not all(0.0 <= c <= 1.0 for c in v):
+        raise ValueError(f"bbox_norm 坐标必须在 [0, 1] 范围内，当前值: {v}")
+    if not (x2 > x1 and y2 > y1):
+        raise ValueError(f"bbox_norm 必须满足 x2 > x1 且 y2 > y1，当前值: {v}")
+    return [round(float(c), 4) for c in v]
+
+
+class BoundingBoxItem(CompatModel):
+    id: str
+    dimension: str
+    label: str
+    attention_level: AttentionLevel
+    score: float = Field(..., ge=0.0, le=1.0)
+    bbox_norm: List[float]
+    location_desc: str
+    fact_description: str
+    source_ref: Optional[str] = None
+    evidence_note: str = ""
+    geometric_inliers: Optional[int] = Field(None, ge=0)
+    reviewed: bool = False
+
+    if PYDANTIC_V2:
+        @field_validator("bbox_norm")
+        @classmethod
+        def validate_bbox(cls, v: List[float]) -> List[float]:
+            return _check_bbox_norm(v)
+    else:
+        @validator("bbox_norm")
+        def validate_bbox(cls, v: List[float]) -> List[float]:
+            return _check_bbox_norm(v)
+
+
+class ImageDetectionPayload(CompatModel):
     task_id: str
     status: TaskStatus = "completed"
-    file_name: str
-    reference_scope: str = Field(..., description="如 '知识产权底库 v2.4 (12,846 部作品)' 或 '定向文件：xxx.png'")
-    image_width: int
-    image_height: int
-    mode: CompareMode = "smart_check"
-    axis_scores: Optional[ImageAxisScores] = None
-    boxes: List[BoundingBoxItem]
-    summary_note: str = Field("", description="全局归纳（仅陈述事实与分布，不做法律侵权定性）")
-
-
-class VideoSegmentItem(BaseModel):
-    """视频多轨时间轴风险片段（供前端 VideoTimelineMarkers 消费）"""
-    id: str = Field(..., description="固定标记编号，如 '01'、'02'")
-    track: Literal["visual_reuse", "ai_anomaly", "plot_av"] = Field(
-        "visual_reuse",
-        description="时间轨分类：visual_reuse(画面与搬运) | ai_anomaly(AI换脸/异常线索) | plot_av(剧情/音画关联)",
-    )
-    dimension: str = Field(..., description="所属五轴维度，如 '画面直接搬运' / '人物形象'")
-    start_sec: float = Field(..., ge=0.0, description="片段起始时间（秒）")
-    end_sec: float = Field(..., ge=0.0, description="片段结束时间（秒）")
-    attention_level: AttentionLevel = Field(..., description="关注程度：focus | moderate | auxiliary")
-    score: float = Field(..., ge=0.0, le=1.0, description="片段最高相似度/置信度")
-    label: str = Field(..., description="分析标签，如 '画面搬运' / 'AI 换脸' / '镜像裁剪复用'")
-    transform_hint: Optional[str] = Field(None, description="检测到的编辑变换线索，如 '水平镜像 + 轻度裁剪'")
-    fact_description: str = Field(..., description="客观检测事实")
-    source_ref: Optional[str] = Field(None, description="命中的底库参考视频与对应时间段")
-    keyframe_time_sec: Optional[float] = Field(None, description="代表关键帧时间戳")
-    evidence_note: str = Field("", description="比对依据与复核提示")
-    reviewed: bool = Field(False, description="人工是否已核对")
-
-
-class VideoDetectionPayload(BaseModel):
-    """视频检测返回 JSON 结构"""
-    task_id: str
-    status: TaskStatus = "completed"
+    error_message: Optional[str] = None
     file_name: str
     reference_scope: str
-    duration_sec: float
+    model_signature: str = ""
+    image_width: int = Field(..., gt=0)
+    image_height: int = Field(..., gt=0)
     mode: CompareMode = "smart_check"
-    axis_scores: Optional[VideoAxisScores] = None
-    segments: List[VideoSegmentItem]
+    axis_scores: Optional[ImageAxisScores] = None
+    boxes: List[BoundingBoxItem] = Field(default_factory=list)
     summary_note: str = ""
 
 
-class ReferenceMetaRecord(BaseModel):
-    """底库入库元数据记录"""
-    vector_id: int = Field(..., description="向量索引中的顺序行号")
-    source_id: str = Field(..., description="素材业务 ID")
+class VideoSegmentItem(CompatModel):
+    id: str
+    track: Literal["visual_reuse", "ai_anomaly", "plot_av"] = "visual_reuse"
+    dimension: str
+    start_sec: float = Field(..., ge=0.0)
+    end_sec: float = Field(..., gt=0.0)
+    attention_level: AttentionLevel
+    score: float = Field(..., ge=0.0, le=1.0)
+    label: str
+    transform_hint: Optional[str] = None
+    fact_description: str
+    source_ref: Optional[str] = None
+    keyframe_time_sec: Optional[float] = Field(None, ge=0.0)
+    evidence_note: str = ""
+    reviewed: bool = False
+
+    if PYDANTIC_V2:
+        @model_validator(mode="after")
+        def validate_time_range(self) -> "VideoSegmentItem":
+            if self.end_sec <= self.start_sec:
+                raise ValueError(f"视频片段必须满足 end_sec > start_sec，当前: [{self.start_sec}, {self.end_sec}]")
+            return self
+    else:
+        @root_validator
+        def validate_time_range(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+            s, e = values.get("start_sec"), values.get("end_sec")
+            if s is not None and e is not None and e <= s:
+                raise ValueError(f"视频片段必须满足 end_sec > start_sec，当前: [{s}, {e}]")
+            return values
+
+
+class VideoDetectionPayload(CompatModel):
+    task_id: str
+    status: TaskStatus = "completed"
+    error_message: Optional[str] = None
+    file_name: str
+    reference_scope: str
+    model_signature: str = ""
+    duration_sec: float = Field(..., gt=0.0)
+    mode: CompareMode = "smart_check"
+    axis_scores: Optional[VideoAxisScores] = None
+    segments: List[VideoSegmentItem] = Field(default_factory=list)
+    summary_note: str = ""
+
+    if PYDANTIC_V2:
+        @model_validator(mode="after")
+        def validate_segments_within_duration(self) -> "VideoDetectionPayload":
+            for seg in self.segments:
+                if seg.end_sec > self.duration_sec + 1e-6:
+                    raise ValueError(f"片段 {seg.id} 结束时间 {seg.end_sec}s 超出视频总时长 {self.duration_sec}s")
+            return self
+    else:
+        @root_validator
+        def validate_segments_within_duration(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+            dur = values.get("duration_sec")
+            segs = values.get("segments") or []
+            if dur is not None:
+                for seg in segs:
+                    if seg.end_sec > dur + 1e-6:
+                        raise ValueError(f"片段 {seg.id} 结束时间 {seg.end_sec}s 超出视频总时长 {dur}s")
+            return values
+
+
+class ReferenceMetaRecord(CompatModel):
+    vector_id: int
+    source_id: str
     media_type: MediaType
     title: str
     file_path: str
     sha256: str
-    frame_timestamp_sec: Optional[float] = Field(None, description="视频关键帧时间戳（秒）")
+    frame_timestamp_sec: Optional[float] = None
     phash: str
     author: str = "未填写"
     license_status: str = "待核验"
     model_name: str
+    model_weights: str = "default"
+    preprocess_version: str = "v1"
+
+
+class IndexManifest(CompatModel):
+    model_name: str
+    model_weights: str
+    preprocess_version: str
+    embedding_dim: int
+    engine: str
+    total_vectors: int
+    unique_sha256_count: int

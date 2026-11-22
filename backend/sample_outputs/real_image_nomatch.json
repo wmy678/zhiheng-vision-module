@@ -1,0 +1,28 @@
+{
+  "task_id": "real_nomatch_01",
+  "status": "no_match",
+  "error_message": null,
+  "file_name": "query_unrelated.jpg",
+  "reference_scope": "本地视觉底库（2 条向量）",
+  "model_signature": "fallback_cv:hsv128+grad256+dct128:cv2-256x256-v1:dim512",
+  "image_width": 480,
+  "image_height": 360,
+  "mode": "smart_check",
+  "axis_scores": {
+    "character_design": null,
+    "pose_composition": null,
+    "color_style": null,
+    "text_logo": null,
+    "aigc_artifact_score": null,
+    "watermark_logo_detected": null,
+    "dimension_status": {
+      "character_design": "not_implemented",
+      "pose_composition": "not_implemented",
+      "color_style": "detected",
+      "text_logo": "not_implemented",
+      "aigc_artifact_score": "not_implemented"
+    }
+  },
+  "boxes": [],
+  "summary_note": "当前参考范围内未发现通过几何验证的匹配区域（未检出不代表不存在库外来源风险）。"
+}

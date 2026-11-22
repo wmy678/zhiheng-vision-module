@@ -1,0 +1,67 @@
+{
+  "task_id": "real_match_01",
+  "status": "completed",
+  "error_message": null,
+  "file_name": "query_pasted_hflip.jpg",
+  "reference_scope": "本地视觉底库（2 条向量）",
+  "model_signature": "fallback_cv:hsv128+grad256+dct128:cv2-256x256-v1:dim512",
+  "image_width": 960,
+  "image_height": 540,
+  "mode": "smart_check",
+  "axis_scores": {
+    "character_design": null,
+    "pose_composition": null,
+    "color_style": 71.9,
+    "text_logo": null,
+    "aigc_artifact_score": null,
+    "watermark_logo_detected": null,
+    "dimension_status": {
+      "character_design": "not_implemented",
+      "pose_composition": "not_implemented",
+      "color_style": "detected",
+      "text_logo": "not_implemented",
+      "aigc_artifact_score": "not_implemented"
+    }
+  },
+  "boxes": [
+    {
+      "id": "01",
+      "dimension": "色彩与画风",
+      "label": "局部画面结构匹配（水平镜像视角）",
+      "attention_level": "focus",
+      "score": 0.8593,
+      "bbox_norm": [
+        0.4738,
+        0.207,
+        0.9227,
+        0.8004
+      ],
+      "location_desc": "画面右侧中段区域（约占画幅 27%）",
+      "fact_description": "在水平镜像视角下与底库参考图《ref_poster_a.jpg》完成局部特征对齐，RANSAC 几何验证通过（455 个一致内点，内点率 94%）。",
+      "source_ref": "ref_poster_a.jpg (ID: img_ref_poster_a)",
+      "evidence_note": "向量余弦相似度 0.719（召回视角: center_crop），局部关键点几何验证通过；结果仅反映画面结构重合，需人工核验授权状态。",
+      "geometric_inliers": 455,
+      "reviewed": false
+    },
+    {
+      "id": "02",
+      "dimension": "色彩与画风",
+      "label": "局部画面结构匹配（水平镜像视角）",
+      "attention_level": "moderate",
+      "score": 0.6102,
+      "bbox_norm": [
+        0.7225,
+        0.2126,
+        0.9248,
+        0.7948
+      ],
+      "location_desc": "画面右侧中段区域（约占画幅 12%）",
+      "fact_description": "在水平镜像视角下与底库参考图《ref_poster_b.jpg》完成局部特征对齐，RANSAC 几何验证通过（23 个一致内点，内点率 29%）。",
+      "source_ref": "ref_poster_b.jpg (ID: img_ref_poster_b)",
+      "evidence_note": "向量余弦相似度 0.645（召回视角: center_crop），局部关键点几何验证通过；结果仅反映画面结构重合，需人工核验授权状态。",
+      "geometric_inliers": 23,
+      "reviewed": false
+    }
+  ],
+  "summary_note": "在当前参考范围内共定位 2 处通过几何验证的相似区域；其余未接入算法维度标注为“未检测”，所有结果仅供人工授权复核。"
+}

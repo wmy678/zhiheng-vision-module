@@ -267,3 +267,23 @@
 .zh-chip-label {
   color: #4b5563;
 }
+
+.zh-state-banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 12px;
+  border: 1px solid transparent;
+}
+.zh-state-loading { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.zh-state-failed { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.zh-state-partial { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.zh-state-nomatch { background: #f9fafb; color: #4b5563; border-color: #d1d5db; border-style: dashed; }
+
+.zh-real-video {
+  width: 100%;
+  max-height: 360px;
+  border-radius: 10px;
+  background: #0f172a;
+  margin-bottom: 12px;
+}

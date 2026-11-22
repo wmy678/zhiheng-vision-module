@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import "./visual-components.css";
 
 const ATTENTION_META = {
@@ -21,31 +21,97 @@ function formatTime(sec) {
 }
 
 /**
- * 视频多轨时间轴色块组件（成员B Week 1 优化版 - 对齐《知衡 v2.4》与功能二规范）
+ * 视频多轨时间轴色块组件（成员B v0.3 - 支持多状态区分与真实 <video> timeupdate 联动）
+ *
+ * Props:
+ * - status: "loading" | "completed" | "no_match" | "partial" | "failed"
+ * - errorMessage?: string
+ * - videoUrl?: string                 若传入真实视频 URL，组件内置 <video> 并由 timeupdate 实时驱动播放头
+ * - videoRef?: React.RefObject        也可外部传入 <video> ref 实现联动
+ * - durationSec?: number
+ * - currentTime?: number
+ * - segments: Array<VideoSegmentItem>
+ * - selectedId?: string | null
+ * - onSelect?: (segment) => void
+ * - onSeek?: (timeSec: number) => void
  */
 export default function VideoTimelineMarkers({
+  status = "completed",
+  errorMessage = "",
+  videoUrl = "",
+  videoRef: externalVideoRef = null,
   durationSec = 60,
-  currentTime = 0,
+  currentTime: controlledTime,
   segments = [],
   selectedId = null,
   onSelect,
   onSeek,
 }) {
+  const internalVideoRef = useRef(null);
+  const activeVideoRef = externalVideoRef || internalVideoRef;
+
+  const [internalTime, setInternalTime] = useState(0);
+  const [mediaDuration, setMediaDuration] = useState(durationSec);
   const [filterLevel, setFilterLevel] = useState("all");
   const [hoveredSeg, setHoveredSeg] = useState(null);
 
-  const safeDuration = Math.max(durationSec, 1);
+  const currentTime = controlledTime !== undefined ? controlledTime : internalTime;
+  const safeDuration = Math.max(mediaDuration || durationSec, 1);
   const playheadPct = Math.min(100, Math.max(0, (currentTime / safeDuration) * 100));
+
+  useEffect(() => {
+    const el = activeVideoRef.current;
+    if (!el) return undefined;
+    const onTimeUpdate = () => setInternalTime(el.currentTime || 0);
+    const onLoadedMeta = () => {
+      if (el.duration && Number.isFinite(el.duration)) setMediaDuration(el.duration);
+    };
+    el.addEventListener("timeupdate", onTimeUpdate);
+    el.addEventListener("loadedmetadata", onLoadedMeta);
+    return () => {
+      el.removeEventListener("timeupdate", onTimeUpdate);
+      el.removeEventListener("loadedmetadata", onLoadedMeta);
+    };
+  }, [activeVideoRef, videoUrl]);
+
+  const seekTo = (sec) => {
+    const clamped = Math.min(safeDuration, Math.max(0, sec));
+    if (activeVideoRef.current) {
+      activeVideoRef.current.currentTime = clamped;
+    }
+    setInternalTime(clamped);
+    if (onSeek) onSeek(+clamped.toFixed(2));
+  };
 
   const visibleSegments = segments.filter(
     (s) => filterLevel === "all" || s.attention_level === filterLevel
   );
 
   const handleTrackClick = (e) => {
-    if (!onSeek) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    onSeek(+(ratio * safeDuration).toFixed(2));
+    seekTo(ratio * safeDuration);
+  };
+
+  const renderStateBanner = () => {
+    if (status === "loading") {
+      return <div className="zh-state-banner zh-state-loading">正在抽帧并检索视频风险片段，请稍候…</div>;
+    }
+    if (status === "failed") {
+      return (
+        <div className="zh-state-banner zh-state-failed">
+          视频检测失败：{errorMessage || "视频解码或抽帧异常（不代表无风险）"}
+        </div>
+      );
+    }
+    if (status === "no_match" || (status === "completed" && segments.length === 0)) {
+      return (
+        <div className="zh-state-banner zh-state-nomatch">
+          当前参考范围内未发现匹配片段（未检出不代表不存在库外来源风险）。
+        </div>
+      );
+    }
+    return null;
   };
 
   return (
@@ -78,11 +144,18 @@ export default function VideoTimelineMarkers({
         </div>
       </div>
 
-      {segments.length === 0 ? (
-        <div className="zh-empty-state">
-          当前参考范围内未发现匹配片段（不代表不存在其他未入库来源风险）
-        </div>
-      ) : (
+      {renderStateBanner()}
+
+      {videoUrl && (
+        <video
+          ref={internalVideoRef}
+          src={videoUrl}
+          controls
+          className="zh-real-video"
+        />
+      )}
+
+      {status !== "failed" && status !== "loading" && (
         <div className="zh-timeline-wrap">
           {hoveredSeg && (
             <div className="zh-timeline-popover">
@@ -105,10 +178,7 @@ export default function VideoTimelineMarkers({
                   <div className="zh-timeline-track" onClick={handleTrackClick}>
                     {trackSegs.map((seg) => {
                       const leftPct = (seg.start_sec / safeDuration) * 100;
-                      const widthPct = Math.max(
-                        2,
-                        ((seg.end_sec - seg.start_sec) / safeDuration) * 100
-                      );
+                      const widthPct = Math.max(2, ((seg.end_sec - seg.start_sec) / safeDuration) * 100);
                       const meta = ATTENTION_META[seg.attention_level] || ATTENTION_META.auxiliary;
                       const isSelected = selectedId === seg.id;
 
@@ -124,8 +194,8 @@ export default function VideoTimelineMarkers({
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            onSelect && onSelect(seg);
-                            onSeek && onSeek(seg.start_sec);
+                            if (onSelect) onSelect(seg);
+                            seekTo(seg.start_sec);
                           }}
                           onMouseEnter={() => setHoveredSeg(seg)}
                           onMouseLeave={() => setHoveredSeg(null)}
@@ -149,29 +219,31 @@ export default function VideoTimelineMarkers({
         </div>
       )}
 
-      <div className="zh-seg-list">
-        {visibleSegments.map((seg) => {
-          const meta = ATTENTION_META[seg.attention_level] || ATTENTION_META.auxiliary;
-          const isSelected = selectedId === seg.id;
-          return (
-            <button
-              key={seg.id}
-              type="button"
-              className={`zh-seg-chip ${isSelected ? "zh-seg-chip-selected" : ""}`}
-              onClick={() => {
-                onSelect && onSelect(seg);
-                onSeek && onSeek(seg.start_sec);
-              }}
-            >
-              <span className="zh-dot" style={{ backgroundColor: meta.color }} />
-              <span>
-                {seg.id} · {formatTime(seg.start_sec)}–{formatTime(seg.end_sec)}
-              </span>
-              <span className="zh-chip-label">{seg.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      {visibleSegments.length > 0 && (
+        <div className="zh-seg-list">
+          {visibleSegments.map((seg) => {
+            const meta = ATTENTION_META[seg.attention_level] || ATTENTION_META.auxiliary;
+            const isSelected = selectedId === seg.id;
+            return (
+              <button
+                key={seg.id}
+                type="button"
+                className={`zh-seg-chip ${isSelected ? "zh-seg-chip-selected" : ""}`}
+                onClick={() => {
+                  if (onSelect) onSelect(seg);
+                  seekTo(seg.start_sec);
+                }}
+              >
+                <span className="zh-dot" style={{ backgroundColor: meta.color }} />
+                <span>
+                  {seg.id} · {formatTime(seg.start_sec)}–{formatTime(seg.end_sec)}
+                </span>
+                <span className="zh-chip-label">{seg.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
